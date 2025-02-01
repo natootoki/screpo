@@ -1,0 +1,5 @@
+▼C#のコンパイラにパスを通す
+path=%path%;C:\WINDOWS\Microsoft.NET\Framework64\v4.0.30319
+
+▼コンパイルする
+csc.exe /reference:System.Drawing.dll,System.Windows.Forms.dll /target:winexe /out:screpo.exe Program.cs
