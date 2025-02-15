@@ -15,6 +15,14 @@ class Program
     [DllImport("user32.dll")]
     private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
+    [DllImport("user32.dll")]
+    private static extern bool SetProcessDPIAware();
+
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
+
+    private const int MDT_EFFECTIVE_DPI = 0;
+
     private const int HOTKEY_ID = 1;
     private const uint MOD_CONTROL = 0x0002;
     private const uint VK_SNAPSHOT = 0x2C;
@@ -23,11 +31,16 @@ class Program
     [STAThread]
     static void Main(string[] args)
     {
+
+        // アプリケーションをDPI対応にする
+        SetProcessDPIAware();
+
         Application.Run(new ScreenshotToolForm());
     }
 
     private class ScreenshotToolForm : Form
     {
+        private float dpiScale; // DPIスケール倍率
         private string saveFolder;
         private string screenshotsFolder;
         private TextBox titleInput;
@@ -41,6 +54,9 @@ class Program
 
         public ScreenshotToolForm()
         {
+            // DPI スケールを取得
+            dpiScale = GetDpiScale();
+
             saveFolder = GetFolderWithFileDialog();
             if (string.IsNullOrEmpty(saveFolder))
             {
@@ -58,7 +74,7 @@ class Program
             int baseWidth = 400;
             int padding = 20;
             int calculatedWidth = TextRenderer.MeasureText("screpo - " + saveFolder, this.Font).Width + padding;
-            Size = new Size(Math.Max(baseWidth, calculatedWidth + 150), 320);
+            Size = new Size((int)(baseWidth * dpiScale), (int)(220 + 100 * dpiScale));
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
@@ -73,7 +89,7 @@ class Program
             dateTimeLabel = new Label
             {
                 Location = new Point(10, 10),
-                Size = new Size(380, 30),
+                Size = new Size((int)(380 * dpiScale), 30),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font = new Font("Arial", 14, FontStyle.Bold)
             };
@@ -97,7 +113,7 @@ class Program
 
             screenSelector = new ComboBox
             {
-                Location = new Point(150, 45),
+                Location = new Point((int)(150 * dpiScale), 45),
                 Size = new Size(220, 25),
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
@@ -125,7 +141,7 @@ class Program
 
             titleInput = new TextBox
             {
-                Location = new Point(100, 85),
+                Location = new Point((int)(100 * dpiScale), 85),
                 Size = new Size(250, 20),
                 Font = new Font("Arial", 9, FontStyle.Regular),
                 Text = "スクリーンショット一覧"
@@ -136,7 +152,7 @@ class Program
             {
                 Text = "スクリーンショット撮影",
                 Location = new Point(10, 120),
-                Size = new Size(150, 25),
+                Size = new Size((int)(150*dpiScale), (int)(25*dpiScale)),
                 Font = new Font("Arial", 9, FontStyle.Regular)
             };
             takeScreenshotButton.Click += (sender, e) => TakeScreenshot();
@@ -145,8 +161,8 @@ class Program
             generateHtmlButton = new Button
             {
                 Text = "HTML生成",
-                Location = new Point(170, 120),
-                Size = new Size(100, 25),
+                Location = new Point((int)(170*dpiScale), 120),
+                Size = new Size((int)(100 * dpiScale), (int)(25*dpiScale)),
                 Font = new Font("Arial", 9, FontStyle.Regular)
             };
             generateHtmlButton.Click += async (sender, e) =>
@@ -161,8 +177,8 @@ class Program
             Button copyFolderPathButton = new Button
             {
                 Text = "パスをコピーする",
-                Location = new Point(280, 120),
-                Size = new Size(100, 25),
+                Location = new Point((int)(280 * dpiScale), 120),
+                Size = new Size((int)(100 * dpiScale), (int)(25*dpiScale)),
                 Font = new Font("Arial", 9, FontStyle.Regular)
             };
             copyFolderPathButton.Click += (sender, e) => CopyFolderPathToClipboard();
@@ -171,8 +187,8 @@ class Program
             Button saveClipboardImageButton = new Button
             {
                 Text = "クリップボードの画像を保存",
-                Location = new Point(10, 250),
-                Size = new Size(200, 25),
+                Location = new Point(10, (int)(200 + 50*dpiScale)),
+                Size = new Size((int)(200*dpiScale), (int)(25*dpiScale)),
                 Font = new Font("Arial", 9, FontStyle.Regular)
             };
             saveClipboardImageButton.Click += async (sender, e) => await SaveClipboardImageToFolder();
@@ -230,6 +246,15 @@ class Program
             {
                 MessageBox.Show("ホットキーの登録に失敗しました。終了します。", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, MessageBoxOptions.ServiceNotification);
                 Environment.Exit(0);
+            }
+        }
+
+        // DPI スケール倍率を取得
+        private float GetDpiScale()
+        {
+            using (Graphics g = this.CreateGraphics())
+            {
+                return g.DpiX / 96.0f; // 標準DPI(96)を基準とする
             }
         }
 
@@ -308,11 +333,25 @@ class Program
                 var selectedScreen = Screen.AllScreens[screenSelector.SelectedIndex];
                 Rectangle bounds = selectedScreen.Bounds;
 
-                using (Bitmap bitmap = new Bitmap(bounds.Width, bounds.Height))
+                // モニターのDPIを取得
+                IntPtr hMonitor = MonitorFromPoint(new Point(bounds.Left, bounds.Top), 2);
+                uint dpiX, dpiY;
+                GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, out dpiX, out dpiY);
+
+                float scaleX = dpiX / 96.0f; // DPIスケール倍率
+                float scaleY = dpiY / 96.0f;
+
+                // DPIを考慮したウィンドウサイズを取得
+                int width = bounds.Width;  // DPIスケール適用しない
+                int height = bounds.Height;
+                int x = bounds.X;
+                int y = bounds.Y;
+
+                using (Bitmap bitmap = new Bitmap(width, height))
                 {
                     using (Graphics g = Graphics.FromImage(bitmap))
                     {
-                        g.CopyFromScreen(bounds.X, bounds.Y, 0, 0, bounds.Size, CopyPixelOperation.SourceCopy);
+                        g.CopyFromScreen(x, y, 0, 0, new Size(width, height), CopyPixelOperation.SourceCopy);
                     }
 
                     string fileName = GetUniqueFileName(screenshotsFolder, "Screenshot_", ".png");
@@ -329,18 +368,31 @@ class Program
 
                     if (autoGenerateHtmlCheckBox.Checked)
                     {
-                        //
                         await GenerateHtmlFile(titleInput.Text);
-                        await ShowNotificationOnScreen("HTMLファイルを自動生成しました。", Color.LightGreen, 3000, bounds);
+                        await ShowNotificationOnScreen(
+                            "HTMLファイルを自動生成しました。",
+                            Color.LightGreen,
+                            3000,
+                            bounds
+                        );
                     }
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show(string.Format("スクリーンショットの保存に失敗しました: {0}", ex.Message),
-                                "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, MessageBoxOptions.ServiceNotification);
+                MessageBox.Show(
+                    string.Format("スクリーンショットの保存に失敗しました: {0}", ex.Message),
+                    "エラー",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error,
+                    MessageBoxDefaultButton.Button1,
+                    MessageBoxOptions.ServiceNotification
+                );
             }
         }
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromPoint(Point pt, uint dwFlags);
 
         private async Task ShowNotificationOnScreen(string message, Color backgroundColor, int durationMs, Rectangle screenBounds)
         {
