@@ -51,6 +51,7 @@ class Program
         private Label dateTimeLabel;
         private Timer dateTimeTimer;
         private TrackBar opacityTrackBar;
+        private Button changeFolderButton;
 
         public ScreenshotToolForm()
         {
@@ -63,6 +64,9 @@ class Program
                 MessageBox.Show("フォルダが選択されませんでした。終了します。", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, MessageBoxOptions.ServiceNotification);
                 Environment.Exit(0);
             }
+
+            // 初期フォルダ設定を関数化して再利用可能に
+            InitializeFolders();
 
             screenshotsFolder = Path.Combine(saveFolder, "img");
             if (!Directory.Exists(screenshotsFolder))
@@ -148,6 +152,15 @@ class Program
             };
             Controls.Add(titleInput);
 
+            changeFolderButton = new Button
+            {
+                Text = "保存フォルダ変更",
+                Location = new Point((int)(200*dpiScale), (int)(200 + 50*dpiScale)),
+                Size = new Size(150, (int)(25*dpiScale))
+            };
+            changeFolderButton.Click += (sender, e) => ChangeSaveFolder();
+            Controls.Add(changeFolderButton);
+
             takeScreenshotButton = new Button
             {
                 Text = "スクリーンショット撮影",
@@ -188,7 +201,7 @@ class Program
             {
                 Text = "クリップボードの画像を保存",
                 Location = new Point(10, (int)(200 + 50*dpiScale)),
-                Size = new Size((int)(200*dpiScale), (int)(25*dpiScale)),
+                Size = new Size((int)(180*dpiScale), (int)(25*dpiScale)),
                 Font = new Font("Arial", 9, FontStyle.Regular)
             };
             saveClipboardImageButton.Click += async (sender, e) => await SaveClipboardImageToFolder();
@@ -246,6 +259,27 @@ class Program
             {
                 MessageBox.Show("ホットキーの登録に失敗しました。終了します。", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error, MessageBoxDefaultButton.Button1, MessageBoxOptions.ServiceNotification);
                 Environment.Exit(0);
+            }
+        }
+
+        private void ChangeSaveFolder()
+        {
+            string newFolder = GetFolderWithFileDialog();
+            if (!string.IsNullOrEmpty(newFolder))
+            {
+                saveFolder = newFolder;
+                InitializeFolders();
+                Text = "screpo - " + saveFolder;
+                MessageBox.Show("保存フォルダを変更しました。", "情報", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private void InitializeFolders()
+        {
+            screenshotsFolder = Path.Combine(saveFolder, "img");
+            if (!Directory.Exists(screenshotsFolder))
+            {
+                Directory.CreateDirectory(screenshotsFolder);
             }
         }
 
